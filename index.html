@@ -1,0 +1,1957 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>頭城老街美食十字路口｜自由探索・美食集點競賽</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Leaflet CSS & JS (互動地圖) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Gun.js 多節點即時同步引擎 -->
+  <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans TC", sans-serif;
+      background-color: #f8fafc;
+      color: #1e293b;
+      overscroll-behavior-y: none;
+      margin: 0;
+    }
+    button, a, select, input, textarea, label {
+      touch-action: manipulation;
+      cursor: pointer;
+    }
+    button:active { transform: scale(0.97); }
+    #mapWrapper { position: relative; isolation: isolate; z-index: 1; }
+    #map { height: 320px; width: 100%; border-radius: 1rem; z-index: 1; }
+    .safe-bottom { padding-bottom: calc(5.8rem + env(safe-area-inset-bottom)); }
+    .custom-pin {
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 9999px; font-weight: 800; color: white;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.35); border: 2px solid white;
+      font-size: 12px;
+    }
+    .pin-red { background: #ef4444; }
+    .pin-yellow { background: #eab308; color: #1f2937; }
+    .pin-landmark { background: #8b5cf6; }
+    .pin-hub { background: #0f172a; }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="safe-bottom">
+
+  <!-- 頂部動態通知 Toast -->
+  <div id="toastContainer" class="fixed top-16 left-1/2 -translate-x-1/2 z-[5000] w-[92%] max-w-sm pointer-events-none space-y-2"></div>
+
+  <!-- ==================== 🚪 進場強制註冊閘門 (Onboarding Gate) ==================== -->
+  <div id="onboardingGate" class="fixed inset-0 z-[4000] bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 my-auto border border-slate-100">
+      <div class="text-center space-y-1">
+        <span class="inline-block px-3 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-extrabold">週六晚間 18:00–19:00 正式版</span>
+        <h2 class="text-xl font-black text-slate-900">頭城老街美食十字路口</h2>
+        <p class="text-xs text-slate-500">自由探索・紅黃標集點・滿分 100 分團隊競賽</p>
+      </div>
+
+      <!-- 步驟 1：輸入匿名暱稱 -->
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold text-slate-700">1. 你的暱稱 / 匿名代號 <span class="text-rose-500">*</span></label>
+          <button type="button" id="btnRandomNick" class="text-xs text-indigo-600 font-bold py-0.5 px-1.5 rounded bg-indigo-50">🎲 隨機產生</button>
+        </div>
+        <input type="text" id="gateNickname" placeholder="例如：頭城大胃王、小芸" class="w-full rounded-xl border-2 border-slate-200 focus:border-slate-900 outline-none px-3.5 py-2.5 text-sm font-bold bg-white" />
+      </div>
+
+      <!-- 步驟 2：選擇組別 -->
+      <div class="space-y-1.5">
+        <label class="block text-xs font-bold text-slate-700">2. 選擇你的所屬組別 <span class="text-rose-500">*</span></label>
+        <div class="grid grid-cols-3 gap-2">
+          <button type="button" data-team="A" class="gate-team-btn p-2.5 rounded-2xl border-2 border-slate-900 bg-slate-900 text-white text-center">
+            <div class="text-base font-black">🅰️ A組</div>
+            <div class="text-[11px] opacity-85 mt-0.5">自由探索隊</div>
+          </button>
+          <button type="button" data-team="B" class="gate-team-btn p-2.5 rounded-2xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-center">
+            <div class="text-base font-black">🅱️ B組</div>
+            <div class="text-[11px] opacity-85 mt-0.5">自由探索隊</div>
+          </button>
+          <button type="button" data-team="C" class="gate-team-btn p-2.5 rounded-2xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-center">
+            <div class="text-base font-black">🅲 C組</div>
+            <div class="text-[11px] opacity-85 mt-0.5">自由探索隊</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- 步驟 3：選擇隊內分工角色 -->
+      <div class="space-y-1.5">
+        <label class="block text-xs font-bold text-slate-700">3. 選擇隊內擔任角色 <span class="text-rose-500">*</span></label>
+        <div class="grid grid-cols-2 gap-2 text-left">
+          <button type="button" data-role="隊長兼導航" class="gate-role-btn p-2.5 rounded-xl border-2 border-slate-900 bg-slate-900 text-white">
+            <div class="text-xs font-bold">🧭 隊長兼導航</div>
+            <div class="text-[10px] opacity-80">路線決策、控管返程</div>
+          </button>
+          <button type="button" data-role="財政官" class="gate-role-btn p-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700">
+            <div class="text-xs font-bold">💰 財政官記帳</div>
+            <div class="text-[10px] opacity-80">收款付款、控管$160-$180</div>
+          </button>
+          <button type="button" data-role="戰地記者" class="gate-role-btn p-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700">
+            <div class="text-xs font-bold">📸 戰地記者</div>
+            <div class="text-[10px] opacity-80">拍照打卡、上傳回報</div>
+          </button>
+          <button type="button" data-role="吃貨隊員" class="gate-role-btn p-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700">
+            <div class="text-xs font-bold">🥢 吃貨隊員</div>
+            <div class="text-[10px] opacity-80">負責吃飽、找彩蛋地標</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- 步驟 4：本組人數與同步房號 -->
+      <div class="grid grid-cols-2 gap-2.5 pt-1">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">本組人數 (算人均用)</label>
+          <select id="gateTeamSize" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-bold bg-white">
+            <option value="3">3 人組 (上限$600)</option>
+            <option value="4" selected>4 人組 (上限$800)</option>
+            <option value="5">5 人組 (上限$1000)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">全員同步房號</label>
+          <input type="text" id="gateRoom" value="TC2026" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono font-bold uppercase bg-white" />
+        </div>
+      </div>
+
+      <button type="button" id="btnCompleteOnboarding" class="w-full bg-gradient-to-r from-amber-500 to-orange-600 text-white font-black py-3.5 rounded-2xl text-sm shadow-lg">
+        🚀 完成報到，進入即時戰況！
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== 頂部固定導覽與計時列 ==================== -->
+  <header class="sticky top-0 z-[1000] bg-slate-900 text-white px-3.5 py-2.5 shadow-md">
+    <div class="max-w-md mx-auto flex items-center justify-between gap-2">
+      <div class="min-w-0 flex-1" id="btnOpenGateHeader">
+        <div class="flex items-center gap-1.5">
+          <span class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold shrink-0">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="headerRoomBadge">TC2026</span>
+          </span>
+          <h1 class="font-bold text-sm truncate">頭城老街美食十字路口</h1>
+        </div>
+        <p class="text-[11px] text-amber-300 font-semibold mt-0.5 truncate" id="userStatusText">點擊設定身分與組別</p>
+      </div>
+
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button type="button" id="btnManualSync" title="立即同步最新戰況" class="bg-slate-800 border border-slate-700 px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-200">
+          🔄 同步
+        </button>
+        <button type="button" id="timerDisplayBtn" class="bg-slate-800 border border-slate-600 px-3 py-1.5 rounded-xl font-mono text-sm font-bold text-emerald-400 flex items-center gap-1">
+          <span>⏱️</span><span id="timerClock">60:00</span>
+        </button>
+      </div>
+    </div>
+    <!-- 18:45 / 18:50 階段橫幅提醒 -->
+    <div id="timeAlertBanner" class="hidden max-w-md mx-auto mt-2 px-3 py-1.5 rounded-xl text-xs font-bold text-center"></div>
+  </header>
+
+  <!-- ==================== 主要內容容器 ==================== -->
+  <main class="max-w-md mx-auto p-3.5 space-y-4">
+
+    <!-- ==================== TAB 1: 即時戰況 ==================== -->
+    <section id="tab-dashboard" class="space-y-4">
+      <!-- 活動核心看板 -->
+      <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-amber-900 rounded-2xl p-4 text-white shadow-md">
+        <div class="flex justify-between items-start gap-2">
+          <div>
+            <p class="text-[11px] font-bold text-amber-300 tracking-wider">週六晚間 18:00–19:00｜自由探索・美食集點</p>
+            <h2 class="text-base font-black mt-0.5">至少 2 店 (含紅/黃標) ＋ 吃飽優先 ($160–$180)</h2>
+          </div>
+          <span class="text-xs bg-amber-500 text-slate-950 px-2.5 py-1 rounded-full font-black shrink-0">滿分 100 分</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 mt-3 text-xs">
+          <a href="https://www.google.com/maps/search/?api=1&query=頭城火車站" target="_blank" rel="noopener" class="bg-white/10 rounded-xl p-2 flex items-center justify-between font-bold">
+            <span>🚩 起點：頭城車站</span><span>導航 ↗</span>
+          </a>
+          <a href="https://www.google.com/maps/search/?api=1&query=頭圍文創園區" target="_blank" rel="noopener" class="bg-white/10 rounded-xl p-2 flex items-center justify-between font-bold">
+            <span>🏁 終點：頭圍文創</span><span>導航 ↗</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- 本組「全員已吃飽」快速確認卡 -->
+      <div class="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-200 flex items-center justify-between gap-3">
+        <div>
+          <div class="text-xs font-extrabold text-slate-900" id="myTeamFullTitle">😋 本組（A組）吃飽狀態確認</div>
+          <p class="text-[11px] text-slate-500">全員確認吃飽且人均 $160–$180，即可角逐【飽足預算獎 +8分】</p>
+        </div>
+        <button type="button" id="btnToggleTeamFull" class="shrink-0 px-3.5 py-2 rounded-xl text-xs font-black border-2 border-slate-300 bg-slate-100 text-slate-700">
+          ⬜ 尚未吃飽
+        </button>
+      </div>
+
+      <!-- 三組即時積分榜 -->
+      <div class="space-y-2.5">
+        <div class="flex items-center justify-between px-1">
+          <h3 class="font-bold text-sm text-slate-800">🏆 三組即時總分與預算甜區追蹤</h3>
+          <button type="button" id="btnOpenLineImport" class="text-xs text-indigo-700 font-bold bg-indigo-100 px-2.5 py-1 rounded-xl">
+            📋 貼上LINE回報
+          </button>
+        </div>
+        <div id="teamScoreCards" class="space-y-2.5"></div>
+      </div>
+
+      <!-- 即時打卡動態牆 -->
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-bold text-sm text-slate-800">📡 全員即時打卡動態牆</h3>
+          <span class="text-xs text-slate-400 font-semibold" id="feedCountText">0 則回報</span>
+        </div>
+        <div id="liveFeedList" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 2: 美食地圖 ==================== -->
+    <section id="tab-map" class="space-y-3 hidden">
+      <div class="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <div>
+            <h2 class="font-bold text-sm">🗺️ 頭城老街紅黃標美食地圖 (18:00–19:00)</h2>
+            <p class="text-xs text-slate-500">自由選店不限順序！點擊地標可開啟 Google Maps 導航</p>
+          </div>
+          <a href="https://www.google.com/maps/search/?api=1&query=頭城老街美食" target="_blank" rel="noopener" class="shrink-0 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-xl font-bold">
+            Google 地圖 ↗
+          </a>
+        </div>
+        <div id="mapWrapper">
+          <div id="map"></div>
+        </div>
+        <div class="flex flex-wrap gap-1.5 mt-2.5 text-xs">
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-bold">🔴 4.5+ 紅標 (+3分/間，上限4間)</span>
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 font-bold">🟡 4.0–4.4 黃標人氣店</span>
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 font-bold">🏛️ 文化彩蛋 (+10分/項)</span>
+        </div>
+      </div>
+
+      <!-- 篩選按鈕列 -->
+      <div class="flex gap-1.5 overflow-x-auto hide-scrollbar py-1" id="mapFilterBar">
+        <button type="button" data-filter="all" class="filter-btn shrink-0 px-3.5 py-2 rounded-full text-xs font-bold bg-slate-900 text-white">全部推薦</button>
+        <button type="button" data-filter="red" class="filter-btn shrink-0 px-3.5 py-2 rounded-full text-xs font-bold bg-white text-slate-700 border">🔴 4.5+ 紅標 (+3分)</button>
+        <button type="button" data-filter="yellow" class="filter-btn shrink-0 px-3.5 py-2 rounded-full text-xs font-bold bg-white text-slate-700 border">🟡 4.0+ 黃標人氣</button>
+        <button type="button" data-filter="meal" class="filter-btn shrink-0 px-3.5 py-2 rounded-full text-xs font-bold bg-white text-emerald-700 border">🍜 吃飽正餐/麵食</button>
+        <button type="button" data-filter="landmark" class="filter-btn shrink-0 px-3.5 py-2 rounded-full text-xs font-bold bg-white text-purple-700 border">🏛️ 文化彩蛋 (+10分)</button>
+      </div>
+
+      <!-- 店家清單 -->
+      <div id="storeCardList" class="space-y-2.5"></div>
+    </section>
+
+    <!-- ==================== TAB 3: 自由打卡回報 ==================== -->
+    <section id="tab-checkin" class="space-y-4 hidden">
+      <!-- 自由探索任務提示卡 -->
+      <div class="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 text-xs text-amber-950 space-y-1">
+        <div class="font-extrabold text-sm">🧭 自由選店＆打卡秘訣（不強制跑關）</div>
+        <p>• <b>基本門檻</b>：19:00 前完成<b>至少 2 間不同店家</b>消費（含至少 1 間紅或黃標）。</p>
+        <p>• <b>紅標加分</b>：每間不同 🔴 紅標店額外 <b>+3 分</b>（每組最多計 4 間，最高 +12 分）。</p>
+        <p>• <b>吃飽優先</b>：每人平均消費 <b>$160–$180</b>（最接近 $170 且全員吃飽組得 <b>+8 分</b>）。</p>
+      </div>
+
+      <!-- 打卡回報表單 -->
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3.5">
+        <div class="flex items-center justify-between border-b pb-2.5">
+          <div>
+            <h3 class="font-bold text-base text-slate-900">📸 新增美食消費 ／ 文化彩蛋打卡</h3>
+            <p class="text-xs text-slate-500">送出後同步至 Firebase（約 4 秒內更新），並自動複製 LINE 群組格式</p>
+          </div>
+          <span id="formTeamBadge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-900">A組</span>
+        </div>
+
+        <!-- 選擇組別與打卡類型 -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">回報組別</label>
+            <select id="checkinTeam" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-bold bg-white">
+              <option value="A">🅰️ 第 A 組</option>
+              <option value="B">🅱️ 第 B 組</option>
+              <option value="C">🅲 第 C 組</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">打卡任務類型</label>
+            <select id="checkinType" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-bold bg-white">
+              <option value="food">🍴 美食店家消費打卡</option>
+              <option value="bonus1">🏛️ 彩蛋：古蹟巡禮 (+10分)</option>
+              <option value="bonus2">🎨 彩蛋：文青步道 (+10分)</option>
+              <option value="bonus3">🫶 彩蛋：熱情老店合照 (+10分)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 選擇店家 (含現場自訂店家選項) -->
+        <div id="storeSelectBox" class="space-y-2">
+          <label class="block text-xs font-bold text-slate-600">選擇攻略店家（或選最上方「➕ 現場自訂店家」）</label>
+          <select id="checkinStore" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold bg-white"></select>
+
+          <!-- 當選擇「現場自訂店家」時展開 -->
+          <div id="customStoreFields" class="hidden p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">輸入現場發現的店家名稱 <span class="text-rose-500">*</span></label>
+              <input type="text" id="customStoreName" placeholder="例如：頭城老街某家臭豆腐" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm bg-white" />
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">該店在 Google Maps 上的評分等級</label>
+              <select id="customStoreGrade" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold bg-white">
+                <option value="red">🔴 紅標美食店 (Google 4.5 分以上，+3分)</option>
+                <option value="yellow">🟡 黃標人氣店 (Google 4.0–4.4 分)</option>
+                <option value="normal">⚪ 一般在地店家 (滿足店數門檻)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- 品項與金額 -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1" id="itemLabelText">購買品項 / 彩蛋說明 <span class="text-rose-500">*</span></label>
+            <input type="text" id="checkinItem" placeholder="例：招牌乾麵3碗+魚丸湯" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white" />
+          </div>
+          <div id="costInputBox">
+            <label class="block text-xs font-bold text-slate-600 mb-1">本店全組消費金額 (元)</label>
+            <input type="number" id="checkinCost" min="0" inputmode="numeric" placeholder="例：210" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-mono bg-white" />
+          </div>
+        </div>
+
+        <!-- 拍照或上傳照片 -->
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">拍攝店家招牌與食物同框照（選填，自動壓縮同步）</label>
+          <input type="file" id="checkinPhoto" accept="image/*" class="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-100 file:text-slate-700" />
+          <img id="photoPreview" class="hidden mt-2 h-36 w-full object-cover rounded-xl border" alt="預覽圖片" />
+        </div>
+
+        <button type="button" id="btnSubmitCheckin" class="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl text-sm shadow-md">
+          ✅ 送出打卡紀錄 ＆ 自動複製 LINE 回報格式
+        </button>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 4: 規則手冊 ==================== -->
+    <section id="tab-rules" class="space-y-3.5 hidden">
+      <!-- 一、基本資訊 -->
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2">
+        <h2 class="font-bold text-base text-slate-900">📍 一、活動基本資訊與時間表</h2>
+        <ul class="text-xs text-slate-600 space-y-1 leading-relaxed">
+          <li>• <b>活動時間</b>：週六晚間 <b>18:00–19:00</b>（共 60 分鐘）</li>
+          <li>• <b>起點 / 終點</b>：頭城火車站前廣場 $\rightarrow$ 頭圍文創園區</li>
+          <li>• <b>分組與預算</b>：10–12 人分 3 組（每組 3–4 人），每人上限 <b>NT$200</b></li>
+          <li>• <b>建議消費目標</b>：每人平均 <b>NT$160–180</b>（以全組吃飽為最高原則！）</li>
+        </ul>
+        <div class="border rounded-xl overflow-hidden text-xs mt-2">
+          <div class="grid grid-cols-3 bg-slate-100 font-bold p-2 text-slate-700">
+            <div>時間</div><div class="col-span-2">任務內容</div>
+          </div>
+          <div class="divide-y text-[11px] text-slate-600">
+            <div class="grid grid-cols-3 p-2"><div class="font-mono font-bold">18:00–18:05</div><div class="col-span-2">起點集合、分組、領取經費、確認規則</div></div>
+            <div class="grid grid-cols-3 p-2"><div class="font-mono font-bold">18:05–18:45</div><div class="col-span-2">自由探索、選店消費、拍照打卡</div></div>
+            <div class="grid grid-cols-3 p-2 bg-amber-50/60"><div class="font-mono font-bold text-amber-800">18:45</div><div class="col-span-2 font-semibold text-amber-900">最後 15 分鐘提醒，各組開始規劃返程</div></div>
+            <div class="grid grid-cols-3 p-2 bg-rose-50/60"><div class="font-mono font-bold text-rose-700">18:50</div><div class="col-span-2 font-semibold text-rose-800">最後 10 分鐘提醒，停止遠距離移動</div></div>
+            <div class="grid grid-cols-3 p-2"><div class="font-mono font-bold">18:50–19:00</div><div class="col-span-2">返回頭圍文創園區、完成結算與照片互投</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 二、自由選店與紅黃標 -->
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2 text-xs text-slate-600">
+        <h2 class="font-bold text-base text-slate-900">🧭 二、自由選店基本條件＆紅黃標制度</h2>
+        <p>1. 每組須於時間內完成 <b>至少 2 間不同店家</b> 的美食消費，且包含 <b>至少 1 間紅標或黃標店家</b>。</p>
+        <p>2. 不強制路線與順序！遇排隊超過 10 分鐘、售完或打烊可直接換店，不扣分。</p>
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <div class="p-2.5 rounded-xl bg-red-50 text-red-900 border border-red-100">
+            <div class="font-bold">🔴 紅標美食店 (4.5分+)</div>
+            <p class="text-[11px] mt-0.5">每完成 1 間不同紅標店 <b>+3 分</b>，每組最多計 4 間（最高 +12 分）。</p>
+          </div>
+          <div class="p-2.5 rounded-xl bg-amber-50 text-amber-900 border border-amber-100">
+            <div class="font-bold">🟡 黃標人氣店 (4.0–4.4分)</div>
+            <p class="text-[11px] mt-0.5">滿足基本選店門檻與吃飽需求，正餐、小吃、冰品皆可自由搭配。</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 三、100分制計分表 -->
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2">
+        <h2 class="font-bold text-base text-slate-900">🏅 三、計分方式（總分上限 100 分）</h2>
+        <div class="border rounded-xl overflow-hidden text-xs">
+          <div class="grid grid-cols-12 bg-slate-900 text-white font-bold p-2">
+            <div class="col-span-4">評分項目</div>
+            <div class="col-span-3 text-center">分數</div>
+            <div class="col-span-5">判定規則</div>
+          </div>
+          <div class="divide-y text-[11px] text-slate-700">
+            <div class="grid grid-cols-12 p-2 items-center"><div class="col-span-4 font-bold">準時完賽</div><div class="col-span-3 text-center font-bold text-emerald-700">40 分</div><div class="col-span-5">完成 ≥2 間不同店(含紅/黃標)且 19:00 前抵終點</div></div>
+            <div class="grid grid-cols-12 p-2 items-center"><div class="col-span-4 font-bold">🔴 紅標加分</div><div class="col-span-3 text-center font-bold text-red-600">最高 12 分</div><div class="col-span-5">每間不同紅標店 +3 分，最多 4 間</div></div>
+            <div class="grid grid-cols-12 p-2 items-center"><div class="col-span-4 font-bold">🏛️ 古蹟巡禮</div><div class="col-span-3 text-center font-bold text-purple-700">+10 分</div><div class="col-span-5">盧纘祥故居池塘或十三行街屋與食物合照</div></div>
+            <div class="grid grid-cols-12 p-2 items-center"><div class="col-span-4 font-bold">🎨 文青步道</div><div class="col-span-3 text-center font-bold text-purple-700">+10 分</div><div class="col-span-5">文學巷木牌詩詞下或藝術巷/彩繪牆拍照</div></div>
+            <div class="grid grid-cols-12 p-2 items-center"><div class="col-span-4 font-bold">🫶 熱情老店</div><div class="col-span-3 text-center font-bold text-purple-700">+10 分</div><div class="col-span-5">徵得同意邀老闆或店員比讚/比愛心合照</div></div>
+            <div class="grid grid-cols-12 p-2 items-center bg-emerald-50/50"><div class="col-span-4 font-bold">😋 飽足預算獎</div><div class="col-span-3 text-center font-bold text-emerald-700">+8 分</div><div class="col-span-5">全員吃飽、人均 $160–$180 且最接近 $170 者獨得</div></div>
+            <div class="grid grid-cols-12 p-2 items-center bg-pink-50/50"><div class="col-span-4 font-bold">📸 社群大片獎</div><div class="col-span-3 text-center font-bold text-pink-700">+10 分</div><div class="col-span-5">終點跨組互投照片(禁自投)，最高票獲獎</div></div>
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-500 pt-1">※ 超過 19:00 每遲到 1 分鐘扣 2 分；超過 10 分鐘完賽基礎分（40分）歸零。同分時依序比較：紅標加分 $\rightarrow$ 文化彩蛋分 $\rightarrow$ 準時抵達時間。</p>
+      </div>
+
+      <!-- 四、獎懲與安全 -->
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-1.5 text-xs text-slate-600">
+        <h2 class="font-bold text-base text-slate-900">🏆 四、獎懲制度與安全守則</h2>
+        <p>• <b>冠軍【頭城老街美食王】</b>：由另兩組集資請每位冠軍隊員一杯在地飲品或叭噗冰（或享回程優先選歌/選座權）。</p>
+        <p>• <b>墊底【老街雕像挑戰】</b>：於頭圍文創園區日式木造走廊前模仿古蹟雕像拍趣味合照。</p>
+        <p>• <b>安全守則</b>：禁止邊走邊吃、自備垃圾袋、不為搶分奔跑闖紅燈、拍店員前須先取得同意。</p>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 5: 終點結算、投票與設定 ==================== -->
+    <section id="tab-profile" class="space-y-4 hidden">
+      <!-- 1. 終點跨組投票：社群大片獎 (+10分) -->
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="font-bold text-base text-slate-900">🗳️ 終點互投：【社群大片獎 +10分】</h3>
+            <p class="text-xs text-slate-500">每組只能投給「別組」（系統自動禁止自投），最高票自動 +10 分！</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-xs" id="voteButtonsContainer"></div>
+        <div class="pt-2 border-t flex items-center justify-between text-xs text-slate-500">
+          <span id="voteSummaryText">目前票數統計中...</span>
+          <button type="button" id="btnResetVotes" class="text-rose-600 font-bold underline">重置投票</button>
+        </div>
+      </div>
+
+      <!-- 2. 主辦人終點結算控制台（吃飽確認 ＆ 遲到扣分） -->
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
+        <h3 class="font-bold text-base text-slate-900">⚖️ 終點結算判定（吃飽確認 ＆ 遲到扣分）</h3>
+        <p class="text-xs text-slate-500">19:00 集合時，請確認各組是否全員吃飽，以及是否有超過 19:00 遲到（每分鐘 -2 分）：</p>
+        <div id="settlementControlRows" class="space-y-2.5 text-xs"></div>
+      </div>
+
+      <!-- 3. 個人身分修改 -->
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="font-bold text-sm text-slate-900">👤 修改我的身分與組別人數</h3>
+          <button type="button" id="btnReopenGate" class="text-xs bg-amber-100 text-amber-900 font-bold px-3 py-1.5 rounded-xl">
+            🚪 開啟全螢幕報到窗
+          </button>
+        </div>
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">我的暱稱</label>
+            <input type="text" id="profileNickname" class="w-full rounded-xl border px-3 py-2 text-sm font-bold bg-white" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">所屬組別</label>
+            <select id="profileTeam" class="w-full rounded-xl border px-3 py-2 text-sm font-bold bg-white">
+              <option value="A">🅰️ A組</option>
+              <option value="B">🅱️ B組</option>
+              <option value="C">🅲 C組</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">隊內角色</label>
+            <select id="profileRole" class="w-full rounded-xl border px-3 py-2 text-sm font-bold bg-white">
+              <option value="隊長兼導航">🧭 隊長兼導航</option>
+              <option value="財政官">💰 財政官</option>
+              <option value="戰地記者">📸 戰地記者</option>
+              <option value="吃貨隊員">🥢 吃貨隊員</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">本組人數</label>
+            <select id="profileTeamSize" class="w-full rounded-xl border px-3 py-2 text-sm font-bold bg-white">
+              <option value="3">3 人組</option>
+              <option value="4">4 人組</option>
+              <option value="5">5 人組</option>
+            </select>
+          </div>
+        </div>
+        <button type="button" id="btnSaveProfile" class="w-full bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-xs">
+          💾 儲存個人設定並同步
+        </button>
+      </div>
+
+      <!-- 4. 雲端同步強化與總召工具箱 -->
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
+        <h3 class="font-bold text-sm text-slate-800">☁️ 雲端同步設定 ＆ 總召工具箱</h3>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-500 mb-1">Firebase Realtime Database 網址（預設已連結；可改用其他資料庫）</label>
+          <div class="flex gap-1.5">
+            <input type="url" id="firebaseUrlInput" placeholder="https://beach-hang-default-rtdb.asia-southeast1.firebasedatabase.app" class="flex-1 rounded-xl border px-3 py-2 text-xs bg-white font-mono" />
+            <button type="button" id="btnSaveFirebaseUrl" class="bg-slate-900 text-white px-3 py-2 rounded-xl text-xs font-bold shrink-0">套用</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2.5 text-xs pt-1">
+          <button type="button" id="btnLoadDemo" class="py-3 px-3 rounded-xl bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
+            ✨ 載入模擬戰況預覽
+          </button>
+          <button type="button" id="btnOpenClearModal" class="py-3 px-3 rounded-xl bg-rose-50 text-rose-700 font-bold border border-rose-200">
+            🗑️ 清空本房號所有紀錄
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== 底部 App 導覽列 ==================== -->
+  <nav class="fixed bottom-0 left-0 right-0 z-[1000] bg-white border-t border-slate-200 shadow-lg">
+    <div class="max-w-md mx-auto grid grid-cols-5 text-center py-1.5" id="bottomNav">
+      <button type="button" data-tab="dashboard" class="nav-btn flex flex-col items-center py-1 text-slate-900 font-bold">
+        <span class="text-lg">🏆</span><span class="text-[11px]">即時戰況</span>
+      </button>
+      <button type="button" data-tab="map" class="nav-btn flex flex-col items-center py-1 text-slate-400">
+        <span class="text-lg">🗺️</span><span class="text-[11px]">美食地圖</span>
+      </button>
+      <button type="button" data-tab="checkin" class="nav-btn flex flex-col items-center py-1 text-slate-400">
+        <span class="text-lg">📸</span><span class="text-[11px]">打卡回報</span>
+      </button>
+      <button type="button" data-tab="rules" class="nav-btn flex flex-col items-center py-1 text-slate-400">
+        <span class="text-lg">📖</span><span class="text-[11px]">規則手冊</span>
+      </button>
+      <button type="button" data-tab="profile" class="nav-btn flex flex-col items-center py-1 text-slate-400">
+        <span class="text-lg">🗳️</span><span class="text-[11px]">結算/設定</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ==================== 彈窗區 ==================== -->
+  <!-- 18:00-19:00 中央倒數計時器彈窗 -->
+  <div id="timerModal" class="fixed inset-0 z-[3000] bg-black/60 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-xs w-full p-4 space-y-3 shadow-xl">
+      <h3 class="font-bold text-base text-slate-900">⏱️ 18:00–19:00 全員同步計時器</h3>
+      <p class="text-xs text-slate-500">啟動後將同步至所有人的手機！剩餘 15 分鐘（18:45）與 10 分鐘（18:50）會自動跳出返程提醒。</p>
+      <div class="grid grid-cols-2 gap-2">
+        <button type="button" id="btnStartTimer60" class="bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-xs">▶️ 啟動 60 分鐘</button>
+        <button type="button" id="btnStartTimer15" class="bg-amber-500 text-slate-950 font-bold py-2.5 rounded-xl text-xs">⚡ 測試剩 15 分鐘</button>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <button type="button" id="btnResetTimer" class="bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-xs">🔄 重設 60:00</button>
+        <button type="button" id="btnCloseTimerModal" class="border text-slate-600 font-bold py-2 rounded-xl text-xs">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LINE 文字匯入彈窗 -->
+  <div id="lineImportModal" class="fixed inset-0 z-[3000] bg-black/60 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-4 space-y-3 shadow-xl">
+      <h3 class="font-bold text-base text-slate-900">📋 貼上 LINE 群組打卡文字快速匯入</h3>
+      <p class="text-xs text-slate-500">支援格式：【第 A 組】店家名稱：[無名乾麵]｜品項：[乾麵]｜花費：[150] 元</p>
+      <textarea id="linePasteInput" rows="3" placeholder="請貼上 LINE 群組回報文字..." class="w-full rounded-xl border p-2.5 text-xs bg-white"></textarea>
+      <div class="flex gap-2">
+        <button type="button" id="btnConfirmLineImport" class="flex-1 bg-indigo-600 text-white font-bold py-2.5 rounded-xl text-xs">解析並同步戰況</button>
+        <button type="button" id="btnCloseLineImport" class="px-4 py-2.5 bg-slate-100 rounded-xl text-xs font-bold">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 清空確認彈窗 -->
+  <div id="clearConfirmModal" class="fixed inset-0 z-[3000] bg-black/60 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-xs w-full p-4 space-y-3 shadow-xl">
+      <h3 class="font-bold text-base text-rose-600">🗑️ 確定清空本房號所有紀錄？</h3>
+      <p class="text-xs text-slate-600">這將會清除所有人的打卡紀錄、吃飽狀態與投票結果。</p>
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button type="button" id="btnConfirmClearAll" class="bg-rose-600 text-white font-bold py-2.5 rounded-xl text-xs">確定清空</button>
+        <button type="button" id="btnCancelClearAll" class="bg-slate-100 text-slate-700 font-bold py-2.5 rounded-xl text-xs">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      // ==================== 0. 安全儲存與通用工具 ====================
+      const memoryStore = {};
+      const safeStorage = {
+        getItem(k) { try { return window.localStorage.getItem(k); } catch (e) { return memoryStore[k] || null; } },
+        setItem(k, v) { try { window.localStorage.setItem(k, v); } catch (e) { memoryStore[k] = String(v); } },
+        removeItem(k) { try { window.localStorage.removeItem(k); } catch (e) { delete memoryStore[k]; } }
+      };
+
+      function showToast(msg, type = 'success') {
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+        const el = document.createElement('div');
+        const bg = type === 'error' ? 'bg-rose-600' : (type === 'info' ? 'bg-slate-800' : 'bg-emerald-600');
+        el.className = `${bg} text-white text-xs font-bold px-4 py-3 rounded-2xl shadow-lg transition-all duration-300 text-center pointer-events-auto`;
+        el.innerText = msg;
+        container.appendChild(el);
+        setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 2800);
+      }
+
+      function copyToClipboard(text) {
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text);
+            return true;
+          }
+        } catch (e) {}
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+          return true;
+        } catch (e) { return false; }
+      }
+
+      // ==================== 1. 週六晚間 18:00–19:00 頭城老街美食與彩蛋資料庫 ====================
+      const STORES = [
+        // 🔴 紅標美食店 (Google 4.5分以上，每間不同店 +3 分，上限 4 間)
+        {
+          id: 'wuming', name: '無名乾麵', grade: 'red', rating: 4.6, isMeal: true,
+          hours: '週六 15:00–20:00', category: '飽足麵食',
+          address: '頭城鎮沙成路71號', lat: 24.8576, lng: 121.8234,
+          items: '招牌乾麵、餛飩魚丸湯、小菜',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=頭城無名乾麵'
+        },
+        {
+          id: 'neighbor', name: '鄰家傳統美食 NEIGHBOR', grade: 'red', rating: 4.8, isMeal: true,
+          hours: '週六 16:00–19:00 (⚠️19:00打烊)', category: '飽足麵食',
+          address: '頭城鎮沙成路40號', lat: 24.8581, lng: 121.8229,
+          items: '古早味家常麵食、傳統小菜',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=頭城鄰家傳統美食'
+        },
+        {
+          id: 'jika', name: '極喀食堂-頭城美食熱炒', grade: 'red', rating: 4.7, isMeal: true,
+          hours: '週六 17:00–21:00', category: '正餐熱炒',
+          address: '頭城鎮青雲路三段145號', lat: 24.8569, lng: 121.8241,
+          items: '現炒主食、蘭陽熱炒、鮮魚湯',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=極喀食堂頭城美食熱炒'
+        },
+        {
+          id: 'pasta', name: '陽光田園 Pasta', grade: 'red', rating: 4.6, isMeal: true,
+          hours: '週六 16:30–20:30', category: '義式簡餐',
+          address: '頭城鎮開蘭路215號', lat: 24.8589, lng: 121.8244,
+          items: '焗烤雞肉燉飯、義大利麵、脆皮濃湯',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=頭城陽光田園Pasta'
+        },
+        {
+          id: 'lianfa', name: '聯發冰師傅台灣蔬果冰老店', grade: 'red', rating: 4.6, isMeal: false,
+          hours: '週六 10:30–21:00', category: '甜點冰品',
+          address: '頭城鎮青雲路三段190號', lat: 24.8578, lng: 121.8245,
+          items: '花生捲冰淇淋、土芭樂叭噗、紅龍果冰',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=聯發冰師傅台灣蔬果冰老店'
+        },
+        {
+          id: 'heibaopei', name: '黑白配冰沙豆花', grade: 'red', rating: 4.8, isMeal: false,
+          hours: '週六 11:00–20:30', category: '甜點冰品',
+          address: '頭城鎮公園路54號', lat: 24.8602, lng: 121.8212,
+          items: '黑糖冰沙豆花、花生冰沙豆花',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=黑白配冰沙豆花'
+        },
+        {
+          id: 'fumei', name: '原富美香雞排', grade: 'red', rating: 4.6, isMeal: false,
+          hours: '週六 15:00–22:30', category: '人氣炸物',
+          address: '頭城鎮開蘭路177號', lat: 24.8585, lng: 121.8240,
+          items: '傳統香雞排、炸湯圓、地瓜薯條',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=頭城原富美香雞排'
+        },
+        {
+          id: 'lanyangroll', name: '蘭陽肉卷（頭城店）', grade: 'red', rating: 4.5, isMeal: false,
+          hours: '週六 11:00–21:00', category: '人氣炸物',
+          address: '頭城鎮青雲路一段235號', lat: 24.8535, lng: 121.8210,
+          items: '現炸五香肉卷、魯肉飯',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=蘭陽肉卷頭城店'
+        },
+        {
+          id: 'chami', name: '就是茶米飲料店（石花凍）', grade: 'red', rating: 4.7, isMeal: false,
+          hours: '週六 10:00–20:45', category: '在地飲品',
+          address: '頭城鎮開蘭路商圈', lat: 24.8575, lng: 121.8239,
+          items: '東北角石花凍飲、檸檬石花凍',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=頭城就是茶米飲料店'
+        },
+        {
+          id: 'guwang', name: '穀王烘焙（頭城門市）', grade: 'red', rating: 4.7, isMeal: false,
+          hours: '週六 09:00–21:00', category: '烘焙伴手',
+          address: '頭城鎮開蘭路339號', lat: 24.8606, lng: 121.8242,
+          items: '宜蘭牛舌餅、現烤蔥麵包',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=穀王烘焙頭城門市'
+        },
+
+        // 🟡 黃標人氣店 (Google 4.0–4.4分)
+        {
+          id: 'weijia', name: '頭城魏家食府', grade: 'yellow', rating: 4.3, isMeal: true,
+          hours: '週六 16:30–19:45', category: '蘭陽手路菜',
+          address: '頭城鎮纘祥路38號 (火車站斜對面)', lat: 24.8588, lng: 121.8221,
+          items: '宜蘭糕渣、西魯肉、手工肉捲、魯肉飯',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=頭城魏家食府'
+        },
+        {
+          id: 'lewu', name: '樂屋日本料理', grade: 'yellow', rating: 4.3, isMeal: true,
+          hours: '週六 17:00–19:50', category: '日式正餐',
+          address: '頭城鎮西一巷15號', lat: 24.8574, lng: 121.8225,
+          items: '握壽司、招牌卷、豬排定食、鮮魚味噌湯',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=樂屋日本料理'
+        },
+        {
+          id: 'qingshangzuo', name: '請上座美食熱炒100', grade: 'yellow', rating: 4.1, isMeal: true,
+          hours: '週六 17:00–20:00', category: '正餐熱炒',
+          address: '頭城鎮開蘭路379號', lat: 24.8610, lng: 121.8245,
+          items: '平價炒飯、炒麵、百元家常熱炒',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=頭城請上座美食熱炒100'
+        },
+        {
+          id: 'azong', name: '阿宗芋冰城', grade: 'yellow', rating: 4.3, isMeal: false,
+          hours: '週六 09:00–21:00', category: '甜點冰品',
+          address: '頭城鎮青雲路三段267號', lat: 24.8595, lng: 121.8252,
+          items: '傳統叭噗三球（芋頭、紅豆、花生、鳳梨）',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=阿宗芋冰城'
+        },
+        {
+          id: 'adan', name: '阿丹芋頭牛奶冰沙', grade: 'yellow', rating: 4.4, isMeal: false,
+          hours: '週六 10:00–18:30 (⚠️18:30打烊)', category: '甜點冰品',
+          address: '頭城鎮纘祥路14-1號', lat: 24.8582, lng: 121.8220,
+          items: '招牌芋頭牛奶冰沙、紅豆牛奶冰沙',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=阿丹芋頭牛奶冰沙'
+        },
+        {
+          id: 'xinxiezhen', name: '新協珍餅店', grade: 'yellow', rating: 4.4, isMeal: false,
+          hours: '週六 08:00–21:30', category: '烘焙伴手',
+          address: '頭城鎮民鋒路1-3號', lat: 24.8583, lng: 121.8235,
+          items: '古早味月光餅（地瓜餅）、石頭麵包',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=頭城新協珍餅店'
+        },
+
+        // 🏛️ 文化彩蛋地標 (+10分)
+        {
+          id: 'landmark1', name: '【古蹟巡禮】盧纘祥故居池塘／十三行街屋', grade: 'landmark', rating: 4.6, isMeal: false,
+          hours: '全天開放戶外合影 (+10分)', category: '文化彩蛋',
+          address: '頭城鎮和平街139號周邊', lat: 24.8572, lng: 121.8237,
+          items: '在盧纘祥故居前池塘或十三行街屋附近與食物合照 (+10分)',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=盧纘祥故居'
+        },
+        {
+          id: 'landmark2', name: '【文青步道】文學巷木牌詩詞／藝術巷彩繪牆', grade: 'landmark', rating: 4.5, isMeal: false,
+          hours: '全天開放戶外合影 (+10分)', category: '文化彩蛋',
+          address: '頭城鎮和平街中段巷弄', lat: 24.8566, lng: 121.8236,
+          items: '在文學巷木牌詩詞下或藝術巷/彩繪牆前拍照 (+10分)',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=頭城老街文學巷'
+        },
+        {
+          id: 'landmark3', name: '【熱情老店】邀店家老闆或店員比讚/愛心合照', grade: 'landmark', rating: 5.0, isMeal: false,
+          hours: '徵得店家同意後拍攝 (+10分)', category: '文化彩蛋',
+          address: '頭城老街任一消費店家', lat: 24.8579, lng: 121.8232,
+          items: '徵得店家同意後，邀請老闆或店員一起比讚或比愛心合照 (+10分)',
+          gmap: 'https://www.google.com/maps/search/?api=1&query=頭城老街'
+        }
+      ];
+
+      // ==================== 2. 狀態管理與跨手機同步引擎 ====================
+      let userProfile = {
+        uid: 'u_' + Math.random().toString(36).substring(2, 9),
+        nickname: '',
+        team: 'A',
+        role: '隊長兼導航',
+        teamSize: 4,
+        room: 'TC2026',
+        registered: false
+      };
+
+      try {
+        const saved = JSON.parse(safeStorage.getItem('tc_profile_v3'));
+        if (saved && saved.nickname) userProfile = saved;
+      } catch (e) {}
+
+      let gateSelectedTeam = userProfile.team || 'A';
+      let gateSelectedRole = userProfile.role || '隊長兼導航';
+
+      let checkins = [];
+      let members = {};
+      let teamMeta = {
+        A: { isFull: false, lateMins: 0, size: 4 },
+        B: { isFull: false, lateMins: 0, size: 4 },
+        C: { isFull: false, lateMins: 0, size: 4 }
+      };
+      let photoVotes = {}; // { voterUid: 'A' | 'B' | 'C' }
+      let sharedTimerEnd = 0;
+      const DEFAULT_FIREBASE_URL = 'https://beach-hang-default-rtdb.asia-southeast1.firebasedatabase.app';
+      let customFirebaseUrl = (safeStorage.getItem('tc_firebase_url') || DEFAULT_FIREBASE_URL).replace(/\/$/, '');
+
+      function loadRoomLocalState() {
+        const r = userProfile.room;
+        try { checkins = JSON.parse(safeStorage.getItem('tc_v3_checkins_' + r)) || []; } catch (e) { checkins = []; }
+        try { members = JSON.parse(safeStorage.getItem('tc_v3_members_' + r)) || {}; } catch (e) { members = {}; }
+        try {
+          const savedMeta = JSON.parse(safeStorage.getItem('tc_v3_meta_' + r));
+          if (savedMeta) teamMeta = Object.assign(teamMeta, savedMeta);
+        } catch (e) {}
+        try { photoVotes = JSON.parse(safeStorage.getItem('tc_v3_votes_' + r)) || {}; } catch (e) { photoVotes = {}; }
+        sharedTimerEnd = Number(safeStorage.getItem('tc_v3_timer_' + r)) || 0;
+      }
+      loadRoomLocalState();
+
+      function saveRoomLocalState() {
+        const r = userProfile.room;
+        checkins.sort((a, b) => b.timestamp - a.timestamp);
+        safeStorage.setItem('tc_v3_checkins_' + r, JSON.stringify(checkins));
+        safeStorage.setItem('tc_v3_members_' + r, JSON.stringify(members));
+        safeStorage.setItem('tc_v3_meta_' + r, JSON.stringify(teamMeta));
+        safeStorage.setItem('tc_v3_votes_' + r, JSON.stringify(photoVotes));
+        if (sharedTimerEnd) safeStorage.setItem('tc_v3_timer_' + r, String(sharedTimerEnd));
+      }
+
+      // 多節點 Gun.js 同步 + 可選 Firebase REST 同步
+      let gun = null;
+      let gunRoom = null;
+
+      function initSyncEngine() {
+        try {
+          if (typeof Gun !== 'undefined') {
+            gun = Gun({
+              peers: [
+                'https://gun-manhattan.herokuapp.com/gun',
+                'https://relay.peer.ooo/gun',
+                'https://peer.wallie.io/gun'
+              ]
+            });
+            connectSyncRoom(userProfile.room);
+          }
+        } catch (e) {}
+
+        // Firebase REST 同步：啟動時先讀取雲端，之後每 4 秒輪詢一次。
+        // 寫入使用 PATCH，避免 PUT 整個房間資料時覆蓋其他頂層欄位。
+        if (customFirebaseUrl) {
+          pullFromFirebase();
+          setInterval(() => { pullFromFirebase(); }, 4000);
+        }
+      }
+
+      function connectSyncRoom(roomCode) {
+        if (!gun) return;
+        try {
+          gunRoom = gun.get('toucheng_2026_v3_' + roomCode);
+
+          // 監聽打卡紀錄
+          gunRoom.get('checkins').map().on((data, id) => {
+            if (!data || !id) return;
+            if (data.deleted) {
+              const prev = checkins.length;
+              checkins = checkins.filter(c => c.id !== id);
+              if (checkins.length !== prev) { saveRoomLocalState(); renderAll(); }
+            } else if (data.id && !checkins.some(c => c.id === data.id)) {
+              checkins.push(data);
+              saveRoomLocalState();
+              renderAll();
+            }
+          });
+
+          // 監聽隊員名單
+          gunRoom.get('members').map().on((data, uid) => {
+            if (!data || !uid || !data.nickname) return;
+            members[uid] = data;
+            if (data.team && data.teamSize && teamMeta[data.team]) {
+              teamMeta[data.team].size = Number(data.teamSize);
+            }
+            saveRoomLocalState();
+            renderAll();
+          });
+
+          // 監聽各組吃飽與遲到狀態
+          gunRoom.get('teamMeta').map().on((data, teamKey) => {
+            if (!data || !['A', 'B', 'C'].includes(teamKey)) return;
+            teamMeta[teamKey] = {
+              isFull: Boolean(data.isFull),
+              lateMins: Number(data.lateMins) || 0,
+              size: Number(data.size) || teamMeta[teamKey].size || 4
+            };
+            saveRoomLocalState();
+            renderAll();
+          });
+
+          // 監聽社群大片投票
+          gunRoom.get('votes').map().on((votedTeam, voterUid) => {
+            if (!voterUid) return;
+            if (votedTeam === 'NONE') {
+              delete photoVotes[voterUid];
+            } else if (['A', 'B', 'C'].includes(votedTeam)) {
+              photoVotes[voterUid] = votedTeam;
+            }
+            saveRoomLocalState();
+            renderAll();
+          });
+
+          // 監聽中央計時器
+          gunRoom.get('timer').on((data) => {
+            if (!data || typeof data.endTime === 'undefined') return;
+            sharedTimerEnd = Number(data.endTime) || 0;
+            safeStorage.setItem('tc_v3_timer_' + userProfile.room, String(sharedTimerEnd));
+            updateTimerTick();
+          });
+        } catch (e) {}
+      }
+
+      // Firebase Realtime Database REST 同步。
+      // 路徑：/rooms/{房號}.json；需在 Firebase Rules 允許相應讀寫。
+      function getFirebaseRoomUrl() {
+        const base = (customFirebaseUrl || DEFAULT_FIREBASE_URL).trim().replace(/\/$/, '');
+        const room = encodeURIComponent(userProfile.room || 'TC2026');
+        return `${base}/rooms/${room}.json`;
+      }
+
+      async function pushToFirebase() {
+        if (!customFirebaseUrl) return false;
+        const payload = {
+          checkins, members, teamMeta, photoVotes, sharedTimerEnd,
+          updatedAt: Date.now()
+        };
+        try {
+          const res = await fetch(getFirebaseRoomUrl(), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (!res.ok) {
+            console.error('Firebase 寫入失敗：', res.status, await res.text());
+            return false;
+          }
+          return true;
+        } catch (e) {
+          console.error('Firebase 寫入連線錯誤：', e);
+          return false;
+        }
+      }
+
+      async function pullFromFirebase() {
+        if (!customFirebaseUrl) return false;
+        try {
+          const res = await fetch(getFirebaseRoomUrl(), { cache: 'no-store' });
+          if (!res.ok) {
+            console.error('Firebase 讀取失敗：', res.status, await res.text());
+            return false;
+          }
+          const data = await res.json();
+          if (!data) return false;
+
+          if (Array.isArray(data.checkins)) {
+            checkins = data.checkins.filter(Boolean);
+          } else if (data.checkins && typeof data.checkins === 'object') {
+            // 相容 Firebase 將清單回傳為 keyed object 的情況
+            checkins = Object.values(data.checkins).filter(Boolean);
+          }
+          if (data.members && typeof data.members === 'object') members = data.members;
+          if (data.teamMeta && typeof data.teamMeta === 'object') {
+            teamMeta = Object.assign(teamMeta, data.teamMeta);
+          }
+          if (data.photoVotes && typeof data.photoVotes === 'object') photoVotes = data.photoVotes;
+          if (typeof data.sharedTimerEnd !== 'undefined') {
+            sharedTimerEnd = Number(data.sharedTimerEnd) || 0;
+          }
+          saveRoomLocalState();
+          renderAll();
+          updateTimerTick();
+          return true;
+        } catch (e) {
+          console.error('Firebase 讀取連線錯誤：', e);
+          return false;
+        }
+      }
+
+      function broadcastMemberPresence() {
+        if (!userProfile.nickname) return;
+        const obj = {
+          uid: userProfile.uid,
+          nickname: userProfile.nickname,
+          team: userProfile.team,
+          role: userProfile.role,
+          teamSize: Number(userProfile.teamSize) || 4,
+          updatedAt: Date.now()
+        };
+        members[userProfile.uid] = obj;
+        if (teamMeta[userProfile.team]) teamMeta[userProfile.team].size = obj.teamSize;
+        saveRoomLocalState();
+        if (gunRoom) {
+          try { gunRoom.get('members').get(userProfile.uid).put(obj); } catch (e) {}
+        }
+        pushToFirebase();
+      }
+
+      // ==================== 3. 核心計分引擎（滿分 100 分制） ====================
+      function calculateAllScores() {
+        const stats = {
+          A: { name: '第 A 組', stores: new Set(), redStores: new Set(), yellowStores: new Set(), bonuses: new Set(), spend: 0, size: teamMeta.A.size || 4, isFull: teamMeta.A.isFull, lateMins: teamMeta.A.lateMins || 0, roster: [], votes: 0 },
+          B: { name: '第 B 組', stores: new Set(), redStores: new Set(), yellowStores: new Set(), bonuses: new Set(), spend: 0, size: teamMeta.B.size || 4, isFull: teamMeta.B.isFull, lateMins: teamMeta.B.lateMins || 0, roster: [], votes: 0 },
+          C: { name: '第 C 組', stores: new Set(), redStores: new Set(), yellowStores: new Set(), bonuses: new Set(), spend: 0, size: teamMeta.C.size || 4, isFull: teamMeta.C.isFull, lateMins: teamMeta.C.lateMins || 0, roster: [], votes: 0 }
+        };
+
+        // 整理隊員名單
+        Object.values(members).forEach(m => {
+          if (stats[m.team]) {
+            stats[m.team].roster.push(`${m.nickname}(${(m.role || '').substring(0, 2)})`);
+          }
+        });
+
+        // 整理打卡紀錄 (由舊到新)
+        const chronological = [...checkins].sort((a, b) => a.timestamp - b.timestamp);
+        chronological.forEach(c => {
+          const t = stats[c.team];
+          if (!t) return;
+          if (c.type === 'food') {
+            const storeKey = c.storeId === 'custom' ? ('custom_' + c.storeName) : c.storeId;
+            t.stores.add(storeKey);
+            if (c.grade === 'red') t.redStores.add(storeKey);
+            if (c.grade === 'yellow') t.yellowStores.add(storeKey);
+            t.spend += Number(c.cost) || 0;
+          } else if (String(c.type).startsWith('bonus')) {
+            t.bonuses.add(c.type);
+          }
+        });
+
+        // 統計社群大片獎跨組票數
+        let maxVotes = 0;
+        Object.values(photoVotes).forEach(teamKey => {
+          if (stats[teamKey]) {
+            stats[teamKey].votes += 1;
+            if (stats[teamKey].votes > maxVotes) maxVotes = stats[teamKey].votes;
+          }
+        });
+
+        // 判定【飽足預算獎 +8分】：全員已吃飽 + 人均 160~180 + 最接近 170
+        let budgetWinner = null;
+        let minDiffFrom170 = Infinity;
+        ['A', 'B', 'C'].forEach(k => {
+          const t = stats[k];
+          t.perPerson = Math.round(t.spend / t.size);
+          t.maxBudget = t.size * 200;
+          t.inSweetSpot = (t.perPerson >= 160 && t.perPerson <= 180 && t.spend <= t.maxBudget);
+          t.diff170 = Math.abs(t.perPerson - 170);
+          if (t.isFull && t.inSweetSpot && t.stores.size >= 2) {
+            if (t.diff170 < minDiffFrom170) {
+              minDiffFrom170 = t.diff170;
+              budgetWinner = k;
+            }
+          }
+        });
+
+        // 計算各組總分 (上限 100 分)
+        ['A', 'B', 'C'].forEach(k => {
+          const t = stats[k];
+          const hasRedOrYellow = (t.redStores.size + t.yellowStores.size) >= 1;
+          t.qualifiesBase = (t.stores.size >= 2 && hasRedOrYellow);
+
+          // 1. 準時完賽基礎分 (40分)：滿2店且含紅/黃標得40分；僅1店顯示20分進度；遲到超過10分鐘歸零，否則每分鐘扣2分
+          let rawBase = 0;
+          if (t.qualifiesBase) rawBase = 40;
+          else if (t.stores.size === 1) rawBase = 20;
+
+          if (t.lateMins > 10) {
+            t.baseScore = 0;
+          } else {
+            t.baseScore = Math.max(0, rawBase - (t.lateMins * 2));
+          }
+
+          // 2. 紅標美食加分 (每間不同紅標 +3分，最多 4 間 = 12分)
+          t.redCountCapped = Math.min(4, t.redStores.size);
+          t.redScore = t.redCountCapped * 3;
+
+          // 3. 文化彩蛋加分 (每項 +10分，最高 30分)
+          t.bonusScore = t.bonuses.size * 10;
+
+          // 4. 飽足預算獎 (+8分)
+          t.isBudgetWinner = (budgetWinner === k);
+          t.budgetScore = t.isBudgetWinner ? 8 : 0;
+
+          // 5. 社群大片獎 (+10分，需至少得 1 票且為最高票)
+          t.isPhotoWinner = (maxVotes > 0 && t.votes === maxVotes);
+          t.photoScore = t.isPhotoWinner ? 10 : 0;
+
+          t.totalScore = t.baseScore + t.redScore + t.bonusScore + t.budgetScore + t.photoScore;
+        });
+
+        return stats;
+      }
+
+      // ==================== 4. 畫面渲染函式 ====================
+      function renderHeader() {
+        document.getElementById('headerRoomBadge').textContent = userProfile.room;
+        const statusEl = document.getElementById('userStatusText');
+        if (userProfile.nickname) {
+          statusEl.textContent = `👤 ${userProfile.team}組｜${userProfile.role}：${userProfile.nickname} (${userProfile.teamSize}人組 · 點此修改)`;
+        } else {
+          statusEl.textContent = '尚未完成報到 · 點此設定';
+        }
+        document.getElementById('profileNickname').value = userProfile.nickname;
+        document.getElementById('profileTeam').value = userProfile.team;
+        document.getElementById('profileRole').value = userProfile.role;
+        document.getElementById('profileTeamSize').value = userProfile.teamSize;
+        document.getElementById('checkinTeam').value = userProfile.team;
+        document.getElementById('formTeamBadge').textContent = userProfile.team + '組';
+        document.getElementById('firebaseUrlInput').value = customFirebaseUrl || DEFAULT_FIREBASE_URL;
+
+        // 本組吃飽按鈕狀態
+        const myMeta = teamMeta[userProfile.team] || { isFull: false };
+        document.getElementById('myTeamFullTitle').textContent = `😋 本組（第 ${userProfile.team} 組）吃飽狀態確認`;
+        const fullBtn = document.getElementById('btnToggleTeamFull');
+        if (myMeta.isFull) {
+          fullBtn.className = 'shrink-0 px-3.5 py-2 rounded-xl text-xs font-black border-2 border-emerald-600 bg-emerald-600 text-white shadow-xs';
+          fullBtn.textContent = '✅ 全員已吃飽！';
+        } else {
+          fullBtn.className = 'shrink-0 px-3.5 py-2 rounded-xl text-xs font-black border-2 border-slate-300 bg-slate-100 text-slate-700';
+          fullBtn.textContent = '⬜ 點此確認吃飽';
+        }
+      }
+
+      function renderDashboard() {
+        const stats = calculateAllScores();
+
+        // 同分排序邏輯：總分 -> 紅標分 -> 彩蛋分
+        const sortedKeys = ['A', 'B', 'C'].sort((x, y) => {
+          if (stats[y].totalScore !== stats[x].totalScore) return stats[y].totalScore - stats[x].totalScore;
+          if (stats[y].redScore !== stats[x].redScore) return stats[y].redScore - stats[x].redScore;
+          return stats[y].bonusScore - stats[x].bonusScore;
+        });
+
+        const container = document.getElementById('teamScoreCards');
+        container.innerHTML = sortedKeys.map((key, idx) => {
+          const t = stats[key];
+          const isMyTeam = (userProfile.team === key);
+          const rankIcon = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : '🥉');
+          const rosterText = t.roster.length > 0 ? t.roster.join('、') : '等待隊員報到中...';
+
+          // 預算進度條 (上限 $200/人)
+          const budgetPct = Math.min(100, Math.round((t.perPerson / 200) * 100));
+          let budgetColor = 'bg-amber-500';
+          let budgetStatus = `人均 $${t.perPerson} (建議 $160–$180)`;
+          if (t.perPerson > 200) {
+            budgetColor = 'bg-rose-600';
+            budgetStatus = `⚠️ 超支！人均 $${t.perPerson} (上限$200)`;
+          } else if (t.inSweetSpot) {
+            budgetColor = 'bg-emerald-500';
+            budgetStatus = `🎯 黃金甜區！人均 $${t.perPerson} (距$170差$${t.diff170})`;
+          }
+
+          return `
+            <div class="bg-white rounded-2xl p-3.5 shadow-sm border ${isMyTeam ? 'border-amber-400 ring-2 ring-amber-400/20' : 'border-slate-100'} space-y-2">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="w-8 h-8 rounded-xl bg-slate-900 text-white font-black text-xs flex items-center justify-center">${rankIcon}${key}</span>
+                  <div>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <h4 class="font-extrabold text-sm text-slate-900">${t.name} (${t.size}人)</h4>
+                      ${t.qualifiesBase ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">✅ 已滿2店門檻</span>' : `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-bold">已吃 ${t.stores.size}/2 店</span>`}
+                      ${t.isFull ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-bold">😋 全員吃飽</span>' : ''}
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-0.5">
+                      基礎 ${t.baseScore}分 · 🔴紅標 ${t.redCountCapped}/4間 (+${t.redScore}) · 🏛️彩蛋 ${t.bonuses.size}/3 (+${t.bonusScore})
+                    </p>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <span class="text-xl font-black text-slate-900">${t.totalScore}</span>
+                  <span class="text-[11px] text-slate-400 font-bold">/100分</span>
+                </div>
+              </div>
+
+              <!-- 預算甜區條 -->
+              <div class="space-y-1">
+                <div class="flex justify-between text-[11px] font-semibold">
+                  <span class="text-slate-600">💰 總花費 <b>$${t.spend}</b> / 上限 $${t.maxBudget}</span>
+                  <span class="${t.inSweetSpot ? 'text-emerald-700 font-bold' : (t.perPerson > 200 ? 'text-rose-600 font-bold' : 'text-slate-500')}">${budgetStatus}</span>
+                </div>
+                <div class="relative w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                  <!-- 標示 80%~90% ($160~$180) 綠色甜區底色 -->
+                  <div class="absolute top-0 bottom-0 left-[80%] width-[10%] bg-emerald-200/80" style="width:10%;"></div>
+                  <div class="${budgetColor} h-full transition-all duration-300" style="width: ${budgetPct}%"></div>
+                </div>
+              </div>
+
+              <!-- 特殊獎項與遲到標籤 -->
+              <div class="flex flex-wrap items-center justify-between gap-1 pt-1 border-t border-slate-100 text-[11px]">
+                <span class="text-slate-500 truncate">👥 隊員：${rosterText}</span>
+                <div class="flex items-center gap-1 shrink-0">
+                  ${t.isBudgetWinner ? '<span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">😋 飽足預算獎+8</span>' : ''}
+                  ${t.isPhotoWinner ? `<span class="px-2 py-0.5 rounded bg-pink-100 text-pink-700 font-bold">📸 社群大片獎+10 (${t.votes}票)</span>` : (t.votes > 0 ? `<span class="text-slate-400 font-bold">📸 ${t.votes}票</span>` : '')}
+                  ${t.lateMins > 0 ? `<span class="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-bold">⏰ 遲到${t.lateMins}分</span>` : ''}
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // 渲染動態牆
+        const feedEl = document.getElementById('liveFeedList');
+        document.getElementById('feedCountText').textContent = `${checkins.length} 則打卡`;
+        if (checkins.length === 0) {
+          feedEl.innerHTML = `<div class="text-center py-6 text-xs text-slate-400">目前尚無打卡紀錄，快去「📸 打卡回報」新增第一間美食吧！</div>`;
+          return;
+        }
+
+        feedEl.innerHTML = checkins.map(c => {
+          const badge = c.grade === 'red' ? '🔴 紅標' : (c.grade === 'yellow' ? '🟡 黃標' : (c.grade === 'landmark' ? '🏛️ 彩蛋' : '⚪ 一般'));
+          return `
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+              <div class="flex items-center justify-between text-xs">
+                <span class="font-bold text-slate-900">【第 ${c.team} 組】${c.author || '隊員'} · <span class="text-indigo-700">${badge}</span></span>
+                <div class="flex items-center gap-2">
+                  <span class="text-slate-400">${new Date(c.timestamp).toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit'})}</span>
+                  <button type="button" data-del-id="${c.id}" class="btn-del-checkin text-rose-500 font-bold px-1.5 py-0.5 rounded hover:bg-rose-50">刪除</button>
+                </div>
+              </div>
+              <p class="text-xs font-extrabold text-slate-800">📍 ${c.storeName} ｜ 🍴 ${c.item}</p>
+              <div class="flex items-center justify-between text-[11px] text-slate-500">
+                <span>${c.type === 'food' ? '計入組別消費與店數' : '文化彩蛋加分任務 (+10分)'}</span>
+                <span class="font-mono font-bold text-slate-800">花費 NT$${c.cost} 元</span>
+              </div>
+              ${c.photo ? `<img src="${c.photo}" class="w-full h-40 object-cover rounded-lg border mt-1" />` : ''}
+              <button type="button" data-copy-id="${c.id}" class="btn-copy-line w-full py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
+                📋 複製 LINE 群組標準打卡格式
+              </button>
+            </div>
+          `;
+        }).join('');
+      }
+
+      function renderSettlementAndVotes() {
+        const stats = calculateAllScores();
+        const myTeam = userProfile.team;
+        const myVote = photoVotes[userProfile.uid] || '';
+
+        // 1. 跨組投票按鈕 (禁止投給自己組)
+        const voteBox = document.getElementById('voteButtonsContainer');
+        voteBox.innerHTML = ['A', 'B', 'C'].map(tKey => {
+          const isSelf = (tKey === myTeam);
+          const isSelected = (myVote === tKey);
+          const count = stats[tKey].votes;
+          if (isSelf) {
+            return `
+              <button type="button" disabled class="p-2.5 rounded-xl border border-slate-200 bg-slate-100 text-slate-400 text-center opacity-60 cursor-not-allowed">
+                <div class="font-black text-sm">${tKey}組 (${count}票)</div>
+                <div class="text-[10px] mt-0.5">不可投本組</div>
+              </button>
+            `;
+          }
+          return `
+            <button type="button" data-vote-team="${tKey}" class="btn-cast-vote p-2.5 rounded-xl border-2 ${isSelected ? 'border-pink-600 bg-pink-600 text-white shadow-md' : 'border-slate-200 bg-white text-slate-800'} text-center">
+              <div class="font-black text-sm">投給 ${tKey}組</div>
+              <div class="text-[11px] mt-0.5 font-bold">${isSelected ? '✅ 已投此組' : `目前 ${count} 票`}</div>
+            </button>
+          `;
+        }).join('');
+
+        document.getElementById('voteSummaryText').textContent =
+          `目前得票：A組 ${stats.A.votes} 票 ｜ B組 ${stats.B.votes} 票 ｜ C組 ${stats.C.votes} 票`;
+
+        // 2. 各組吃飽與遲到扣分控制列
+        const rowsEl = document.getElementById('settlementControlRows');
+        rowsEl.innerHTML = ['A', 'B', 'C'].map(tKey => {
+          const m = teamMeta[tKey] || { isFull: false, lateMins: 0 };
+          return `
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
+              <div>
+                <div class="font-extrabold text-slate-900">第 ${tKey} 組結算狀態</div>
+                <div class="text-[11px] text-slate-500">人均 $${stats[tKey].perPerson} · 已完成 ${stats[tKey].stores.size} 店</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button type="button" data-meta-full="${tKey}" class="btn-meta-full px-2.5 py-1.5 rounded-lg font-bold ${m.isFull ? 'bg-emerald-600 text-white' : 'bg-white border text-slate-600'}">
+                  ${m.isFull ? '😋 已吃飽' : '⬜ 未吃飽'}
+                </button>
+                <div class="flex items-center gap-1 bg-white border rounded-lg px-2 py-1">
+                  <span class="text-[11px] text-slate-500">遲到(分):</span>
+                  <input type="number" min="0" max="30" value="${m.lateMins}" data-meta-late="${tKey}" class="input-meta-late w-10 text-center font-mono font-bold text-xs outline-none" />
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // ==================== 5. 地圖與店家清單 ====================
+      let currentFilter = 'all';
+      let mapInstance = null;
+      let mapMarkers = [];
+
+      function initMap() {
+        if (mapInstance || typeof L === 'undefined') return;
+        try {
+          mapInstance = L.map('map').setView([24.8578, 121.8233], 16);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+          }).addTo(mapInstance);
+
+          const hubIcon = (label) => L.divIcon({
+            className: '',
+            html: `<div class="custom-pin pin-hub" style="width:32px;height:32px;">${label}</div>`,
+            iconSize: [32, 32], iconAnchor: [16, 16]
+          });
+          L.marker([24.8591, 121.8225], { icon: hubIcon('起') }).addTo(mapInstance)
+            .bindPopup('<b>🚩 18:00 集合起點：頭城火車站前廣場</b>');
+          L.marker([24.8585, 121.8223], { icon: hubIcon('終') }).addTo(mapInstance)
+            .bindPopup('<b>🏁 19:00 結算終點：頭圍文創園區</b>');
+
+          renderMapMarkers();
+        } catch (e) {}
+      }
+
+      function getFilteredStores() {
+        return STORES.filter(s => {
+          if (currentFilter === 'red') return s.grade === 'red';
+          if (currentFilter === 'yellow') return s.grade === 'yellow';
+          if (currentFilter === 'meal') return s.isMeal;
+          if (currentFilter === 'landmark') return s.grade === 'landmark';
+          return true;
+        });
+      }
+
+      function renderMapMarkers() {
+        if (!mapInstance) return;
+        mapMarkers.forEach(m => mapInstance.removeLayer(m));
+        mapMarkers = [];
+        getFilteredStores().forEach(s => {
+          const pinClass = s.grade === 'red' ? 'pin-red' : (s.grade === 'yellow' ? 'pin-yellow' : 'pin-landmark');
+          const label = s.grade === 'landmark' ? '★' : s.rating;
+          const icon = L.divIcon({
+            className: '',
+            html: `<div class="custom-pin ${pinClass}" style="width:34px;height:34px;">${label}</div>`,
+            iconSize: [34, 34], iconAnchor: [17, 17]
+          });
+          const marker = L.marker([s.lat, s.lng], { icon }).addTo(mapInstance);
+          marker.bindPopup(`
+            <div style="font-size:12px;line-height:1.5;">
+              <b>${s.grade === 'red' ? '🔴' : (s.grade === 'yellow' ? '🟡' : '🏛️')} ${s.name}</b> (${s.rating}★)<br>
+              <span>🕒 ${s.hours}</span><br>
+              <span>🍴 推薦：${s.items}</span><br>
+              <a href="${s.gmap}" target="_blank" rel="noopener" style="color:#2563eb;font-weight:bold;">📍 開啟 Google Maps 導航 ↗</a>
+            </div>
+          `);
+          mapMarkers.push(marker);
+        });
+      }
+
+      function renderStoreList() {
+        const listEl = document.getElementById('storeCardList');
+        if (!listEl) return;
+        const filtered = getFilteredStores();
+        listEl.innerHTML = filtered.map(s => {
+          const badge = s.grade === 'red'
+            ? '<span class="px-2 py-0.5 rounded-md bg-red-100 text-red-700 font-bold text-[11px]">🔴 紅標 4.5+ (+3分)</span>'
+            : (s.grade === 'yellow'
+                ? '<span class="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-bold text-[11px]">🟡 黃標人氣 4.0+</span>'
+                : '<span class="px-2 py-0.5 rounded-md bg-purple-100 text-purple-700 font-bold text-[11px]">🏛️ 文化彩蛋 (+10分)</span>');
+          return `
+            <div class="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 space-y-2">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    ${badge}
+                    <span class="text-xs font-bold text-slate-500">★ ${s.rating} · ${s.category}</span>
+                  </div>
+                  <h4 class="font-bold text-sm text-slate-900 mt-1">${s.name}</h4>
+                </div>
+                <a href="${s.gmap}" target="_blank" rel="noopener" class="shrink-0 bg-blue-50 text-blue-700 font-bold text-xs px-3 py-2 rounded-xl">
+                  📍 導航 ↗
+                </a>
+              </div>
+              <p class="text-xs text-slate-600">🍴 <b>推薦必點</b>：${s.items}</p>
+              <div class="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
+                <span>🕒 ${s.hours}</span>
+                <button type="button" data-quick-store="${s.id}" class="btn-quick-store bg-slate-900 text-white px-3 py-1.5 rounded-xl font-bold text-xs">
+                  📸 打卡此店 →
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      function populateCheckinSelect() {
+        const select = document.getElementById('checkinStore');
+        if (!select) return;
+        const foodStores = STORES.filter(s => s.grade !== 'landmark');
+        const optionsHtml = [
+          `<option value="custom">➕ 手動輸入現場發現的店家 (自由探索)</option>`,
+          ...foodStores.map(s => {
+            const icon = s.grade === 'red' ? '🔴 (+3分)' : '🟡 (黃標)';
+            return `<option value="${s.id}">${icon} ${s.name} (${s.rating}★)</option>`;
+          })
+        ];
+        select.innerHTML = optionsHtml.join('');
+        // 預設選第一間紅標店
+        if (foodStores.length > 0) select.value = foodStores[0].id;
+      }
+
+      // ==================== 6. 中央計時器與 18:45 / 18:50 提醒 ====================
+      function updateTimerTick() {
+        const clockEl = document.getElementById('timerClock');
+        const btnEl = document.getElementById('timerDisplayBtn');
+        const bannerEl = document.getElementById('timeAlertBanner');
+        if (!sharedTimerEnd) {
+          clockEl.textContent = '60:00';
+          btnEl.className = 'bg-slate-800 border border-slate-600 px-3 py-1.5 rounded-xl font-mono text-sm font-bold text-emerald-400 flex items-center gap-1';
+          bannerEl.classList.add('hidden');
+          return;
+        }
+        const remainSec = Math.max(0, Math.floor((sharedTimerEnd - Date.now()) / 1000));
+        const m = String(Math.floor(remainSec / 60)).padStart(2, '0');
+        const s = String(remainSec % 60).padStart(2, '0');
+        clockEl.textContent = `${m}:${s}`;
+
+        if (remainSec === 0) {
+          btnEl.className = 'bg-rose-700 border border-rose-500 px-3 py-1.5 rounded-xl font-mono text-sm font-bold text-white flex items-center gap-1';
+          bannerEl.className = 'max-w-md mx-auto mt-2 px-3 py-1.5 rounded-xl text-xs font-bold text-center bg-rose-600 text-white';
+          bannerEl.textContent = '⏰ 19:00 時間到！請全體立即於「頭圍文創園區」完成結算與照片互投！';
+          bannerEl.classList.remove('hidden');
+        } else if (remainSec <= 600) {
+          // 18:50 最後 10 分鐘
+          btnEl.className = 'bg-rose-900 border border-rose-500 px-3 py-1.5 rounded-xl font-mono text-sm font-bold text-rose-300 flex items-center gap-1';
+          bannerEl.className = 'max-w-md mx-auto mt-2 px-3 py-1.5 rounded-xl text-xs font-bold text-center bg-rose-500 text-white';
+          bannerEl.textContent = '🚨 最後 10 分鐘提醒（18:50）！請停止遠距離移動，立即動身返回頭圍文創園區！';
+          bannerEl.classList.remove('hidden');
+        } else if (remainSec <= 900) {
+          // 18:45 最後 15 分鐘
+          btnEl.className = 'bg-amber-900 border border-amber-500 px-3 py-1.5 rounded-xl font-mono text-sm font-bold text-amber-300 flex items-center gap-1';
+          bannerEl.className = 'max-w-md mx-auto mt-2 px-3 py-1.5 rounded-xl text-xs font-bold text-center bg-amber-400 text-slate-950';
+          bannerEl.textContent = '📢 最後 15 分鐘提醒（18:45）！請各組確認是否吃飽，並開始規劃返程路線！';
+          bannerEl.classList.remove('hidden');
+        } else {
+          btnEl.className = 'bg-slate-800 border border-slate-600 px-3 py-1.5 rounded-xl font-mono text-sm font-bold text-emerald-400 flex items-center gap-1';
+          bannerEl.classList.add('hidden');
+        }
+      }
+
+      function renderAll() {
+        renderHeader();
+        renderDashboard();
+        renderSettlementAndVotes();
+      }
+
+      // ==================== 7. 事件綁定（Safari 100% 穩定委派） ====================
+      let currentPhotoData = '';
+
+      function switchTab(tabName) {
+        ['dashboard', 'map', 'checkin', 'rules', 'profile'].forEach(t => {
+          document.getElementById('tab-' + t).classList.toggle('hidden', t !== tabName);
+        });
+        document.querySelectorAll('#bottomNav .nav-btn').forEach(btn => {
+          btn.className = (btn.dataset.tab === tabName)
+            ? 'nav-btn flex flex-col items-center py-1 text-slate-900 font-bold'
+            : 'nav-btn flex flex-col items-center py-1 text-slate-400';
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (tabName === 'map') {
+          setTimeout(() => { initMap(); if (mapInstance) mapInstance.invalidateSize(); }, 120);
+        }
+      }
+
+      function checkGateOnBoot() {
+        const gate = document.getElementById('onboardingGate');
+        if (!userProfile.registered || !userProfile.nickname) {
+          gate.classList.remove('hidden');
+          gate.classList.add('flex');
+        } else {
+          gate.classList.add('hidden');
+          gate.classList.remove('flex');
+          broadcastMemberPresence();
+        }
+      }
+
+      function bindEvents() {
+        // 1. 進場報到處按鈕
+        document.getElementById('btnRandomNick').addEventListener('click', () => {
+          const a = ['頭城', '蘭陽', '老街', '爆吃', '傳說', '秒殺', '滿分', '神級'];
+          const b = ['大胃王', '乾麵控', '芋冰俠', '美食家', '小隊長', '吃貨', '導航王'];
+          document.getElementById('gateNickname').value = a[Math.floor(Math.random() * a.length)] + b[Math.floor(Math.random() * b.length)];
+        });
+
+        document.querySelectorAll('.gate-team-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            gateSelectedTeam = btn.dataset.team;
+            document.querySelectorAll('.gate-team-btn').forEach(b => {
+              b.className = (b.dataset.team === gateSelectedTeam)
+                ? 'gate-team-btn p-2.5 rounded-2xl border-2 border-slate-900 bg-slate-900 text-white text-center shadow-md'
+                : 'gate-team-btn p-2.5 rounded-2xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-center';
+            });
+          });
+        });
+
+        document.querySelectorAll('.gate-role-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            gateSelectedRole = btn.dataset.role;
+            document.querySelectorAll('.gate-role-btn').forEach(b => {
+              b.className = (b.dataset.role === gateSelectedRole)
+                ? 'gate-role-btn p-2.5 rounded-xl border-2 border-slate-900 bg-slate-900 text-white text-left shadow-sm'
+                : 'gate-role-btn p-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-left';
+            });
+          });
+        });
+
+        document.getElementById('btnCompleteOnboarding').addEventListener('click', () => {
+          const nick = document.getElementById('gateNickname').value.trim();
+          if (!nick) {
+            showToast('⚠️ 請先輸入你的暱稱或點擊「🎲 隨機產生」！', 'error');
+            document.getElementById('gateNickname').focus();
+            return;
+          }
+          userProfile = {
+            uid: userProfile.uid,
+            nickname: nick,
+            team: gateSelectedTeam,
+            role: gateSelectedRole,
+            teamSize: Number(document.getElementById('gateTeamSize').value) || 4,
+            room: (document.getElementById('gateRoom').value.trim() || 'TC2026').toUpperCase(),
+            registered: true
+          };
+          safeStorage.setItem('tc_profile_v3', JSON.stringify(userProfile));
+          loadRoomLocalState();
+          connectSyncRoom(userProfile.room);
+          broadcastMemberPresence();
+          document.getElementById('onboardingGate').classList.add('hidden');
+          document.getElementById('onboardingGate').classList.remove('flex');
+          renderAll();
+          showToast(`🎉 報到完成！歡迎【第 ${userProfile.team} 組】${userProfile.nickname}`);
+        });
+
+        const reopenGate = () => {
+          document.getElementById('gateNickname').value = userProfile.nickname || '';
+          document.getElementById('gateTeamSize').value = userProfile.teamSize || 4;
+          document.getElementById('gateRoom').value = userProfile.room || 'TC2026';
+          document.getElementById('onboardingGate').classList.remove('hidden');
+          document.getElementById('onboardingGate').classList.add('flex');
+        };
+        document.getElementById('btnOpenGateHeader').addEventListener('click', reopenGate);
+        document.getElementById('btnReopenGate').addEventListener('click', reopenGate);
+
+        // 2. 底部導覽列
+        document.querySelectorAll('#bottomNav .nav-btn').forEach(btn => {
+          btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+        });
+
+        // 3. 手動刷新同步按鈕
+        document.getElementById('btnManualSync').addEventListener('click', () => {
+          connectSyncRoom(userProfile.room);
+          if (customFirebaseUrl) pullFromFirebase();
+          renderAll();
+          showToast('🔄 已同步最新戰況與分數！', 'info');
+        });
+
+        // 4. 本組全員已吃飽切換
+        document.getElementById('btnToggleTeamFull').addEventListener('click', () => {
+          const tKey = userProfile.team;
+          teamMeta[tKey].isFull = !teamMeta[tKey].isFull;
+          saveRoomLocalState();
+          if (gunRoom) {
+            try { gunRoom.get('teamMeta').get(tKey).put(teamMeta[tKey]); } catch (e) {}
+          }
+          pushToFirebase();
+          renderAll();
+          showToast(teamMeta[tKey].isFull ? `😋 已確認【第 ${tKey} 組】全員吃飽！` : `已取消第 ${tKey} 組吃飽確認`, 'info');
+        });
+
+        // 5. 地圖篩選與快速打卡
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            currentFilter = btn.dataset.filter;
+            document.querySelectorAll('.filter-btn').forEach(b => {
+              b.className = (b.dataset.filter === currentFilter)
+                ? 'filter-btn shrink-0 px-3.5 py-2 rounded-full text-xs font-bold bg-slate-900 text-white'
+                : 'filter-btn shrink-0 px-3.5 py-2 rounded-full text-xs font-bold bg-white text-slate-700 border';
+            });
+            renderStoreList();
+            renderMapMarkers();
+          });
+        });
+
+        document.getElementById('storeCardList').addEventListener('click', (e) => {
+          const btn = e.target.closest('.btn-quick-store');
+          if (!btn) return;
+          const storeId = btn.dataset.quickStore;
+          const target = STORES.find(s => s.id === storeId);
+          switchTab('checkin');
+          if (target && target.grade === 'landmark') {
+            if (storeId === 'landmark1') document.getElementById('checkinType').value = 'bonus1';
+            if (storeId === 'landmark2') document.getElementById('checkinType').value = 'bonus2';
+            if (storeId === 'landmark3') document.getElementById('checkinType').value = 'bonus3';
+            document.getElementById('checkinType').dispatchEvent(new Event('change'));
+          } else {
+            document.getElementById('checkinType').value = 'food';
+            document.getElementById('checkinType').dispatchEvent(new Event('change'));
+            document.getElementById('checkinStore').value = storeId;
+            document.getElementById('checkinStore').dispatchEvent(new Event('change'));
+          }
+          showToast(`已帶入「${target ? target.name : ''}」`, 'info');
+        });
+
+        // 6. 打卡表單連動
+        document.getElementById('checkinTeam').addEventListener('change', (e) => {
+          document.getElementById('formTeamBadge').textContent = e.target.value + '組';
+        });
+
+        document.getElementById('checkinType').addEventListener('change', (e) => {
+          const val = e.target.value;
+          const isBonus = val.startsWith('bonus');
+          document.getElementById('storeSelectBox').classList.toggle('hidden', isBonus);
+          document.getElementById('costInputBox').classList.toggle('hidden', isBonus);
+          if (isBonus) {
+            document.getElementById('checkinCost').value = '0';
+            if (val === 'bonus1') document.getElementById('checkinItem').value = '於盧纘祥故居池塘/十三行街屋與食物合照';
+            if (val === 'bonus2') document.getElementById('checkinItem').value = '於文學巷木牌詩詞/藝術巷彩繪牆合照';
+            if (val === 'bonus3') document.getElementById('checkinItem').value = '徵得同意邀店家老闆/店員比讚合照';
+          } else {
+            document.getElementById('checkinItem').value = '';
+            document.getElementById('checkinCost').value = '';
+          }
+        });
+
+        document.getElementById('checkinStore').addEventListener('change', (e) => {
+          const isCustom = (e.target.value === 'custom');
+          document.getElementById('customStoreFields').classList.toggle('hidden', !isCustom);
+        });
+
+        document.getElementById('checkinPhoto').addEventListener('change', (event) => {
+          const file = event.target.files && event.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = function(ev) {
+            const img = new Image();
+            img.onload = function() {
+              const canvas = document.createElement('canvas');
+              const maxW = 460;
+              const scale = Math.min(1, maxW / img.width);
+              canvas.width = img.width * scale;
+              canvas.height = img.height * scale;
+              canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+              currentPhotoData = canvas.toDataURL('image/jpeg', 0.6);
+              const preview = document.getElementById('photoPreview');
+              preview.src = currentPhotoData;
+              preview.classList.remove('hidden');
+            };
+            img.src = ev.target.result;
+          };
+          reader.readAsDataURL(file);
+        });
+
+        document.getElementById('btnSubmitCheckin').addEventListener('click', () => {
+          const team = document.getElementById('checkinTeam').value;
+          const type = document.getElementById('checkinType').value;
+          const isBonus = type.startsWith('bonus');
+          let storeId = document.getElementById('checkinStore').value;
+          let storeName = '';
+          let grade = 'yellow';
+
+          if (isBonus) {
+            grade = 'landmark';
+            if (type === 'bonus1') { storeId = 'landmark1'; storeName = '【古蹟巡禮】盧纘祥故居池塘／十三行街屋'; }
+            if (type === 'bonus2') { storeId = 'landmark2'; storeName = '【文青步道】文學巷／藝術巷彩繪牆'; }
+            if (type === 'bonus3') { storeId = 'landmark3'; storeName = '【熱情老店】與老闆／店員比讚合照'; }
+          } else if (storeId === 'custom') {
+            storeName = document.getElementById('customStoreName').value.trim();
+            grade = document.getElementById('customStoreGrade').value;
+            if (!storeName) {
+              showToast('⚠️ 請輸入現場發現的店家名稱！', 'error');
+              document.getElementById('customStoreName').focus();
+              return;
+            }
+          } else {
+            const sObj = STORES.find(s => s.id === storeId) || STORES[0];
+            storeName = sObj.name;
+            grade = sObj.grade;
+          }
+
+          const item = document.getElementById('checkinItem').value.trim();
+          const cost = isBonus ? 0 : (Number(document.getElementById('checkinCost').value) || 0);
+
+          if (!item) {
+            showToast('⚠️ 請填寫購買品項或彩蛋說明！', 'error');
+            document.getElementById('checkinItem').focus();
+            return;
+          }
+
+          const record = {
+            id: 'chk_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+            team,
+            type,
+            storeId,
+            storeName,
+            grade,
+            item,
+            cost,
+            author: `${userProfile.nickname || '隊員'}(${(userProfile.role || '').substring(0, 2)})`,
+            photo: currentPhotoData,
+            timestamp: Date.now()
+          };
+
+          checkins.unshift(record);
+          saveRoomLocalState();
+          if (gunRoom) {
+            try { gunRoom.get('checkins').get(record.id).put(record); } catch (e) {}
+          }
+          pushToFirebase();
+
+          // 自動複製規則六指定的 LINE 格式：【第 X 組】店家名稱：[店名]｜品項：[食物]｜花費：[金額] 元
+          const lineFormat = `【第 ${team} 組】店家名稱：[${storeName}]｜品項：[${item}]｜花費：[${cost}] 元`;
+          copyToClipboard(lineFormat);
+
+          currentPhotoData = '';
+          document.getElementById('photoPreview').classList.add('hidden');
+          document.getElementById('checkinPhoto').value = '';
+          document.getElementById('checkinItem').value = '';
+          document.getElementById('checkinCost').value = '';
+
+          renderAll();
+          switchTab('dashboard');
+          showToast('✅ 打卡已同步！並已複製 LINE 群組回報文字！');
+        });
+
+        // 7. 動態牆複製與刪除按鈕
+        document.getElementById('liveFeedList').addEventListener('click', (e) => {
+          const copyBtn = e.target.closest('.btn-copy-line');
+          if (copyBtn) {
+            const c = checkins.find(x => x.id === copyBtn.dataset.copyId);
+            if (c) {
+              const txt = `【第 ${c.team} 組】店家名稱：[${c.storeName}]｜品項：[${c.item}]｜花費：[${c.cost}] 元`;
+              copyToClipboard(txt);
+              showToast('📋 已複製 LINE 打卡文字！');
+            }
+            return;
+          }
+          const delBtn = e.target.closest('.btn-del-checkin');
+          if (delBtn) {
+            const id = delBtn.dataset.delId;
+            checkins = checkins.filter(x => x.id !== id);
+            saveRoomLocalState();
+            if (gunRoom) {
+              try { gunRoom.get('checkins').get(id).put({ id, deleted: true }); } catch (e) {}
+            }
+            pushToFirebase();
+            renderAll();
+            showToast('🗑️ 已刪除該筆打卡紀錄', 'info');
+          }
+        });
+
+        // 8. 終點跨組投票與結算控制
+        document.getElementById('voteButtonsContainer').addEventListener('click', (e) => {
+          const btn = e.target.closest('.btn-cast-vote');
+          if (!btn) return;
+          const targetTeam = btn.dataset.voteTeam;
+          if (targetTeam === userProfile.team) {
+            showToast('⚠️ 規則規定不可投給自己組喔！', 'error');
+            return;
+          }
+          photoVotes[userProfile.uid] = targetTeam;
+          saveRoomLocalState();
+          if (gunRoom) {
+            try { gunRoom.get('votes').get(userProfile.uid).put(targetTeam); } catch (e) {}
+          }
+          pushToFirebase();
+          renderAll();
+          showToast(`🗳️ 你已將【社群大片獎】投給第 ${targetTeam} 組！`);
+        });
+
+        document.getElementById('btnResetVotes').addEventListener('click', () => {
+          Object.keys(photoVotes).forEach(uid => {
+            if (gunRoom) { try { gunRoom.get('votes').get(uid).put('NONE'); } catch (e) {} }
+          });
+          photoVotes = {};
+          saveRoomLocalState();
+          pushToFirebase();
+          renderAll();
+          showToast('已重置所有投票紀錄', 'info');
+        });
+
+        document.getElementById('settlementControlRows').addEventListener('click', (e) => {
+          const fullBtn = e.target.closest('.btn-meta-full');
+          if (!fullBtn) return;
+          const tKey = fullBtn.dataset.metaFull;
+          teamMeta[tKey].isFull = !teamMeta[tKey].isFull;
+          saveRoomLocalState();
+          if (gunRoom) { try { gunRoom.get('teamMeta').get(tKey).put(teamMeta[tKey]); } catch (err) {} }
+          pushToFirebase();
+          renderAll();
+        });
+
+        document.getElementById('settlementControlRows').addEventListener('change', (e) => {
+          const lateInput = e.target.closest('.input-meta-late');
+          if (!lateInput) return;
+          const tKey = lateInput.dataset.metaLate;
+          teamMeta[tKey].lateMins = Math.max(0, Number(lateInput.value) || 0);
+          saveRoomLocalState();
+          if (gunRoom) { try { gunRoom.get('teamMeta').get(tKey).put(teamMeta[tKey]); } catch (err) {} }
+          pushToFirebase();
+          renderAll();
+          showToast(`已更新第 ${tKey} 組遲到分鐘數為 ${teamMeta[tKey].lateMins} 分鐘`, 'info');
+        });
+
+        // 9. 個人設定與 Firebase 設定
+        document.getElementById('btnSaveProfile').addEventListener('click', () => {
+          userProfile.nickname = document.getElementById('profileNickname').value.trim() || '神秘吃貨';
+          userProfile.team = document.getElementById('profileTeam').value;
+          userProfile.role = document.getElementById('profileRole').value;
+          userProfile.teamSize = Number(document.getElementById('profileTeamSize').value) || 4;
+          userProfile.registered = true;
+          safeStorage.setItem('tc_profile_v3', JSON.stringify(userProfile));
+          broadcastMemberPresence();
+          renderAll();
+          switchTab('dashboard');
+          showToast('✅ 個人設定已更新並同步！');
+        });
+
+        document.getElementById('btnSaveFirebaseUrl').addEventListener('click', async () => {
+          const enteredUrl = document.getElementById('firebaseUrlInput').value.trim();
+          customFirebaseUrl = (enteredUrl || DEFAULT_FIREBASE_URL).replace(/\/$/, '');
+          if (!/^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(customFirebaseUrl)) {
+            showToast('Firebase 網址格式不正確，請確認網址只包含 https:// 網域', 'error');
+            return;
+          }
+          safeStorage.setItem('tc_firebase_url', customFirebaseUrl);
+          const connected = await pullFromFirebase();
+          if (connected) {
+            showToast('☁️ Firebase 已連線，資料已載入！');
+          } else {
+            showToast('⚠️ 無法讀取 Firebase，請檢查資料庫 Rules 與網址', 'error');
+          }
+          pushToFirebase();
+        });
+
+        // 10. 計時器彈窗
+        const timerModal = document.getElementById('timerModal');
+        document.getElementById('timerDisplayBtn').addEventListener('click', () => {
+          timerModal.classList.remove('hidden');
+          timerModal.classList.add('flex');
+        });
+        document.getElementById('btnCloseTimerModal').addEventListener('click', () => {
+          timerModal.classList.add('hidden');
+          timerModal.classList.remove('flex');
+        });
+        const startSharedTimer = (mins) => {
+          sharedTimerEnd = Date.now() + mins * 60 * 1000;
+          saveRoomLocalState();
+          if (gunRoom) { try { gunRoom.get('timer').put({ endTime: sharedTimerEnd }); } catch (e) {} }
+          pushToFirebase();
+          updateTimerTick();
+          timerModal.classList.add('hidden');
+          timerModal.classList.remove('flex');
+          showToast(`⏱️ 已啟動全體同步 ${mins} 分鐘倒數計時！`);
+        };
+        document.getElementById('btnStartTimer60').addEventListener('click', () => startSharedTimer(60));
+        document.getElementById('btnStartTimer15').addEventListener('click', () => startSharedTimer(15));
+        document.getElementById('btnResetTimer').addEventListener('click', () => {
+          sharedTimerEnd = 0;
+          safeStorage.removeItem('tc_v3_timer_' + userProfile.room);
+          if (gunRoom) { try { gunRoom.get('timer').put({ endTime: 0 }); } catch (e) {} }
+          pushToFirebase();
+          updateTimerTick();
+          timerModal.classList.add('hidden');
+          timerModal.classList.remove('flex');
+          showToast('🔄 計時器已重設為 60:00', 'info');
+        });
+
+        // 11. LINE 文字匯入
+        const lineModal = document.getElementById('lineImportModal');
+        document.getElementById('btnOpenLineImport').addEventListener('click', () => {
+          lineModal.classList.remove('hidden');
+          lineModal.classList.add('flex');
+        });
+        document.getElementById('btnCloseLineImport').addEventListener('click', () => {
+          lineModal.classList.add('hidden');
+          lineModal.classList.remove('flex');
+        });
+        document.getElementById('btnConfirmLineImport').addEventListener('click', () => {
+          const raw = document.getElementById('linePasteInput').value.trim();
+          if (!raw) return;
+          const teamMatch = raw.match(/第\s*([ABC])\s*組/i);
+          const storeMatch = raw.match(/店家名稱\s*[：:]\s*\[?([^\]｜|]+)/);
+          const itemMatch = raw.match(/品項\s*[：:]\s*\[?([^\]｜|]+)/);
+          const costMatch = raw.match(/花費\s*[：:]\s*\[?(\d+)/);
+
+          const sName = storeMatch ? storeMatch[1].trim() : 'LINE匯入店家';
+          const matchedStore = STORES.find(s => sName.includes(s.name) || s.name.includes(sName));
+          const record = {
+            id: 'chk_' + Date.now(),
+            team: teamMatch ? teamMatch[1].toUpperCase() : userProfile.team,
+            type: 'food',
+            storeId: matchedStore ? matchedStore.id : ('custom_' + sName),
+            storeName: sName,
+            grade: matchedStore ? matchedStore.grade : (raw.includes('🔴') ? 'red' : 'yellow'),
+            item: itemMatch ? itemMatch[1].trim() : raw,
+            cost: costMatch ? Number(costMatch[1]) : 150,
+            author: 'LINE匯入',
+            timestamp: Date.now()
+          };
+          checkins.unshift(record);
+          saveRoomLocalState();
+          if (gunRoom) { try { gunRoom.get('checkins').get(record.id).put(record); } catch (e) {} }
+          pushToFirebase();
+          document.getElementById('linePasteInput').value = '';
+          lineModal.classList.add('hidden');
+          lineModal.classList.remove('flex');
+          renderAll();
+          showToast('✅ 已解析 LINE 回報文字並同步至排行榜！');
+        });
+
+        // 12. 模擬資料與清空紀錄
+        document.getElementById('btnLoadDemo').addEventListener('click', () => {
+          checkins = [
+            { id: 'dm1', team: 'A', type: 'food', storeId: 'wuming', storeName: '無名乾麵', grade: 'red', item: '招牌乾麵4碗+餛飩魚丸湯', cost: 360, author: '阿哲(隊長)', timestamp: Date.now() - 1800000 },
+            { id: 'dm2', team: 'A', type: 'food', storeId: 'lianfa', storeName: '聯發冰師傅台灣蔬果冰老店', grade: 'red', item: '花生捲冰淇淋+土芭樂叭噗', cost: 310, author: '阿哲(隊長)', timestamp: Date.now() - 900000 },
+            { id: 'dm3', team: 'A', type: 'bonus1', storeId: 'landmark1', storeName: '【古蹟巡禮】盧纘祥故居池塘／十三行街屋', grade: 'landmark', item: '於盧纘祥故居池塘前與花生捲冰淇淋合照', cost: 0, author: '阿哲(隊長)', timestamp: Date.now() - 600000 },
+            { id: 'dm4', team: 'B', type: 'food', storeId: 'weijia', storeName: '頭城魏家食府', grade: 'yellow', item: '宜蘭糕渣+西魯肉+魯肉飯4碗', cost: 480, author: '小芸(記者)', timestamp: Date.now() - 1500000 },
+            { id: 'dm5', team: 'B', type: 'food', storeId: 'heibaopei', storeName: '黑白配冰沙豆花', grade: 'red', item: '黑糖花生冰沙豆花4碗', cost: 200, author: '小芸(記者)', timestamp: Date.now() - 700000 },
+            { id: 'dm6', team: 'C', type: 'food', storeId: 'lewu', storeName: '樂屋日本料理', grade: 'yellow', item: '綜合壽司+招牌卷+味噌湯', cost: 520, author: '凱文(財政)', timestamp: Date.now() - 1200000 }
+          ];
+          teamMeta.A.isFull = true;
+          teamMeta.B.isFull = true;
+          saveRoomLocalState();
+          renderAll();
+          switchTab('dashboard');
+          showToast('✨ 已載入 100 分制模擬戰況！');
+        });
+
+        const clearModal = document.getElementById('clearConfirmModal');
+        document.getElementById('btnOpenClearModal').addEventListener('click', () => {
+          clearModal.classList.remove('hidden');
+          clearModal.classList.add('flex');
+        });
+        document.getElementById('btnCancelClearAll').addEventListener('click', () => {
+          clearModal.classList.add('hidden');
+          clearModal.classList.remove('flex');
+        });
+        document.getElementById('btnConfirmClearAll').addEventListener('click', () => {
+          checkins.forEach(c => {
+            if (gunRoom) { try { gunRoom.get('checkins').get(c.id).put({ id: c.id, deleted: true }); } catch (e) {} }
+          });
+          checkins = [];
+          photoVotes = {};
+          teamMeta = {
+            A: { isFull: false, lateMins: 0, size: 4 },
+            B: { isFull: false, lateMins: 0, size: 4 },
+            C: { isFull: false, lateMins: 0, size: 4 }
+          };
+          saveRoomLocalState();
+          pushToFirebase();
+          clearModal.classList.add('hidden');
+          clearModal.classList.remove('flex');
+          renderAll();
+          switchTab('dashboard');
+          showToast('🗑️ 已清空本房號所有紀錄！', 'info');
+        });
+      }
+
+      // ==================== 8. 啟動初始化 ====================
+      function boot() {
+        populateCheckinSelect();
+        renderStoreList();
+        renderAll();
+        bindEvents();
+        initSyncEngine();
+        checkGateOnBoot();
+        updateTimerTick();
+        setInterval(updateTimerTick, 1000);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+      } else {
+        boot();
+      }
+    })();
+  </script>
+</body>
+</html>
